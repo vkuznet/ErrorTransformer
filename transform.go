@@ -189,6 +189,13 @@ func TransformFile(path, root, libPrefix string) FileResult {
 			continue
 		}
 
+		// Only wrap returns that are guarded by  if errVar != nil { ... }
+		// Unguarded returns (happy-path returns like "return token, err") must
+		// not be wrapped — err is nil there and wrapping produces %!w(<nil>).
+		if !isGuardedReturn(lines, i, errVar) {
+			continue
+		}
+
 		location := buildLocation(libPrefix, pkg, fi)
 		callee := inferCallee(lines, i, fi.start, errVar)
 
@@ -371,6 +378,37 @@ func inferCallee(lines []string, retLine, funcStart int, errVar string) string {
 		}
 	}
 	return ""
+}
+
+// isGuardedReturn returns true when the return at retLine sits inside an
+// "if <errVar> != nil" (or "if err != nil" variant) block.  It scans upward
+// from retLine looking for the enclosing if-statement within a small window,
+// accepting any of the common guard forms:
+//
+//	if err != nil {
+//	if err != nil { ... }   (single-line)
+//	if _, err = f(); err != nil {
+func isGuardedReturn(lines []string, retLine int, errVar string) bool {
+	// Match:  if [anything;] <errVar> != nil
+	pat := regexp.MustCompile(
+		`\bif\b.*\b` + regexp.QuoteMeta(errVar) + `\s*!=\s*nil`,
+	)
+	// Scan upward up to 5 lines (covers multiline if-headers and blank lines)
+	for i := retLine - 1; i >= 0 && i >= retLine-5; i-- {
+		s := strings.TrimSpace(lines[i])
+		if s == "" || strings.HasPrefix(s, "//") {
+			continue
+		}
+		if pat.MatchString(s) {
+			return true
+		}
+		// Stop at any statement that isn't a closing brace or blank — we've
+		// left the if-block.
+		if s != "{" && s != "}" && !strings.HasPrefix(s, "if ") {
+			break
+		}
+	}
+	return false
 }
 
 // buildLocation constructs the bracket location tag.

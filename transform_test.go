@@ -1134,3 +1134,87 @@ func F() {}
 		t.Errorf("expected fmt injected when no imports exist:\n%s", result)
 	}
 }
+
+func TestTransformFile_UnguardedReturn_Unchanged(t *testing.T) {
+	// The final "return token, err" is on the happy path — err is nil there.
+	// Wrapping it produces fmt.Errorf("... %w", nil) → "%!w(<nil>)" in output.
+	// The transformer must leave unguarded returns alone.
+	src := `package auth
+
+func JWTAccessToken(secret string) (string, error) {
+	tokenString := newSigner()
+	token, err := tokenString.signedString([]byte(secret))
+	return token, err
+}
+
+func newSigner() *signer          { return &signer{} }
+type signer struct{}
+func (s *signer) signedString(_ []byte) (string, error) { return "tok", nil }
+`
+	dir := t.TempDir()
+	path := writeFile(t, dir, "auth.go", src)
+	r := TransformFile(path, dir, "golib")
+
+	if r.Changed {
+		t.Error("expected no changes — unguarded 'return token, err' must not be wrapped")
+	}
+}
+
+func TestTransformFile_GuardedAndUnguarded_OnlyGuardedWrapped(t *testing.T) {
+	// A function with both a guarded error return and a final unguarded return.
+	// Only the guarded one should be transformed.
+	src := `package auth
+
+import "os"
+
+func Sign(secret, path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data) + secret, nil
+}
+`
+	dir := t.TempDir()
+	path := writeFile(t, dir, "auth.go", src)
+	r := TransformFile(path, dir, "golib")
+
+	if !r.Changed {
+		t.Fatal("expected the guarded return to be transformed")
+	}
+	assertContains(t, r.Patch, `fmt.Errorf(`, "guarded return must be wrapped")
+	// Exactly one fmt.Errorf line must appear in the added (+) lines
+	count := 0
+	for _, line := range strings.Split(r.Patch, "\n") {
+		if len(line) >= 2 && line[0] == '+' && line[1] != '+' &&
+			strings.Contains(line, "fmt.Errorf") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 wrapped return, got %d\npatch:\n%s", count, r.Patch)
+	}
+}
+
+func TestTransformFile_SemicolonGuard_Wrapped(t *testing.T) {
+	// if err := os.WriteFile(...); err != nil { return err }
+	src := `package mypkg
+
+import "os"
+
+func Write(path string, data []byte) error {
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+	return nil
+}
+`
+	dir := t.TempDir()
+	path := writeFile(t, dir, "write.go", src)
+	r := TransformFile(path, dir, "mylib")
+
+	if !r.Changed {
+		t.Fatal("expected semicolon-guard return to be transformed")
+	}
+	assertContains(t, r.Patch, `fmt.Errorf(`, "semicolon guard must trigger wrap")
+}
