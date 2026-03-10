@@ -143,8 +143,8 @@ patch written to        : errors.patch
 next steps:
   1. Review  : less errors.patch
   2. Apply   : patch -p1 < errors.patch
-  3. Format  : gofmt -w ./...
-               # or: goimports -w ./...
+  3. Format  : gofmt -w .
+               # or: find . -name "*.go" -not -path "./vendor/*" | xargs goimports -w
 ```
 
 ---
@@ -165,10 +165,10 @@ less errors.patch
 patch -p1 < errors.patch
 
 # 4. Re-sort the newly added "fmt" imports
-gofmt -w ./...
+gofmt -w .
 
 # If you use goimports it handles import grouping and deduplication too
-goimports -w ./...
+find . -name "*.go" -not -path "./vendor/*" | xargs goimports -w
 
 # 5. Verify nothing is broken
 go build ./...
