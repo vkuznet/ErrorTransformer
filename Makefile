@@ -162,9 +162,15 @@ test_cover:
 vet:
 	$(GO) vet ./...
 
+# gofmt accepts a directory and recurses automatically — no ./... needed.
+# goimports is a plain file tool and requires explicit paths via find.
 .PHONY: fmt
 fmt:
 	gofmt -w .
+
+.PHONY: imports
+imports:
+	find . -name "*.go" -not -path "./vendor/*" | xargs goimports -w
 
 .PHONY: clean
 clean:
@@ -191,5 +197,6 @@ help:
 	@echo "  make test_verbose       Run tests with -v"
 	@echo "  make test_cover         Run tests and generate HTML coverage report"
 	@echo "  make vet                Run go vet"
-	@echo "  make fmt                Run gofmt -w"
+	@echo "  make fmt                Run gofmt -w ."
+	@echo "  make imports            Run goimports -w on all non-vendor .go files"
 	@echo "  make clean              Remove bin/ and coverage files"
