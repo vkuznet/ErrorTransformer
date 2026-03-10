@@ -1,5 +1,8 @@
 # ErrorTransformer
 
+[![Go CI build](https://github.com/vkuznet/errortransformer/actions/workflows/go-ci.yml/badge.svg)](https://github.com/vkuznet/errortransformer/actions/workflows/go-ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/vkuznet/errortransformer)](https://goreportcard.com/report/github.com/vkuznet/errortransformer)
+
 A Go tool that automatically rewrites bare `return err` statements across a Go
 codebase into structured `fmt.Errorf` calls with `%w` error wrapping.
 
